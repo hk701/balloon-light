@@ -42,7 +42,7 @@
   </style>
 </head>
 <body>
-  <button id="permission-btn" style="display: none;">点击启动 AR 体验 v54</button>
+  <button id="permission-btn" style="display: none;">点击启动 AR 体验 v50</button>
   <div id="light-indicator"></div>
   
   <script type="module">
@@ -94,7 +94,6 @@
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.shadowMap.enabled = true;  // 启用阴影
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;  // 软阴影
-      renderer.shadowMap.autoUpdate = true;
       document.body.appendChild(renderer.domElement);
 
       // 创建世界容器（所有气球都添加到这个容器中）
@@ -108,22 +107,17 @@
       scene.add(directionalLight);
       
       // 设置阴影参数
-      directionalLight.shadow.mapSize.width = 1024;  // 降低分辨率
-      directionalLight.shadow.mapSize.height = 1024;
+      directionalLight.shadow.mapSize.width = 2048;
+      directionalLight.shadow.mapSize.height = 2048;
       directionalLight.shadow.camera.near = 0.5;
       directionalLight.shadow.camera.far = 50;
       directionalLight.shadow.camera.left = -20;
       directionalLight.shadow.camera.right = 20;
       directionalLight.shadow.camera.top = 20;
       directionalLight.shadow.camera.bottom = -20;
-      directionalLight.shadow.intensity = 0.3;  // 减弱阴影强度
       
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);  // 提高环境光减弱阴影
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);  // 降低环境光让阴影更明显
       scene.add(ambientLight);
-      
-      // 添加半球光源，让阴影更自然
-      const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xffcccc, 0.3);
-      scene.add(hemisphereLight);
       
       // 保存光源引用
       window.mainLight = directionalLight;
@@ -363,7 +357,7 @@
       const balloonMesh = new THREE.Mesh(balloonGeometry, balloonMaterial);
       balloonMesh.scale.y = 1.2;
       balloonMesh.castShadow = true;  // 气球投射阴影
-      balloonMesh.receiveShadow = false;  // 气球不接收阴影（避免相互投影）
+      balloonMesh.receiveShadow = true;  // 气球接收阴影
       balloonGroup.add(balloonMesh);
       
       // 绳子
