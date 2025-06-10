@@ -9,6 +9,7 @@
       margin: 0;
       overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      touch-action: manipulation;  /* 防止双击缩放 */
     }
     canvas {
       display: block;
@@ -29,20 +30,20 @@
     }
     #light-indicator {
       position: absolute;
-      bottom: 20px;
-      left: 20px;
-      color: white;
-      background: rgba(0,0,0,0.5);
-      padding: 10px;
-      border-radius: 5px;
-      font-size: 12px;
-      z-index: 100;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0) 70%);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+      transform: translate(-50%, -50%);
     }
   </style>
 </head>
 <body>
-  <button id="permission-btn" style="display: none;">点击启动 AR 体验 v50</button>
-  
+  <button id="permission-btn" style="display: none;">点击启动 AR 体验 v54</button>
+  <div id="light-indicator"></div>
   
   <script type="module">
     import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js';
@@ -91,8 +92,9 @@
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.setPixelRatio(window.devicePixelRatio);
-      renderer.shadowMap.enabled = true;  // 启用阴影映射
-      renderer.shadowMap.type = THREE.PCFSoftShadowMap;  // 柔和阴影
+      renderer.shadowMap.enabled = true;  // 启用阴影
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;  // 软阴影
+      renderer.shadowMap.autoUpdate = true;
       document.body.appendChild(renderer.domElement);
 
       // 创建世界容器（所有气球都添加到这个容器中）
@@ -101,26 +103,30 @@
 
       // 添加光照
       const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-      directionalLight.position.set(5, 10, 5);
+      directionalLight.position.set(5, 5, 5);
       directionalLight.castShadow = true;  // 启用阴影
+      scene.add(directionalLight);
       
-      // 阴影设置
-      directionalLight.shadow.mapSize.width = 2048;
-      directionalLight.shadow.mapSize.height = 2048;
+      // 设置阴影参数
+      directionalLight.shadow.mapSize.width = 1024;  // 降低分辨率
+      directionalLight.shadow.mapSize.height = 1024;
       directionalLight.shadow.camera.near = 0.5;
       directionalLight.shadow.camera.far = 50;
       directionalLight.shadow.camera.left = -20;
       directionalLight.shadow.camera.right = 20;
       directionalLight.shadow.camera.top = 20;
       directionalLight.shadow.camera.bottom = -20;
+      directionalLight.shadow.intensity = 0.3;  // 减弱阴影强度
       
-      scene.add(directionalLight);
-      
-      // 保存光源引用以便后续修改
-      window.mainLight = directionalLight;
-      
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);  // 降低环境光使阴影更明显
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);  // 提高环境光减弱阴影
       scene.add(ambientLight);
+      
+      // 添加半球光源，让阴影更自然
+      const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xffcccc, 0.3);
+      scene.add(hemisphereLight);
+      
+      // 保存光源引用
+      window.mainLight = directionalLight;
 
       // 检查设备方向权限（iOS 13+需要）
       if (typeof DeviceOrientationEvent !== 'undefined' && 
@@ -357,7 +363,7 @@
       const balloonMesh = new THREE.Mesh(balloonGeometry, balloonMaterial);
       balloonMesh.scale.y = 1.2;
       balloonMesh.castShadow = true;  // 气球投射阴影
-      balloonMesh.receiveShadow = true;  // 气球接收阴影
+      balloonMesh.receiveShadow = false;  // 气球不接收阴影（避免相互投影）
       balloonGroup.add(balloonMesh);
       
       // 绳子
@@ -470,42 +476,49 @@
       renderer.render(scene, camera);
     }
 
-    // 添加触摸/鼠标事件来改变光照方向
-    function handlePointerMove(event) {
-      if (!window.mainLight) return;
+    // 添加触摸控制光照
+    function handleTouch(event) {
+      event.preventDefault();
       
-      // 获取标准化的屏幕坐标 (-1 到 1)
-      const x = (event.clientX / window.innerWidth) * 2 - 1;
-      const y = -(event.clientY / window.innerHeight) * 2 + 1;
+      // 获取触摸点位置
+      const touch = event.touches[0] || event;
+      const x = (touch.clientX / window.innerWidth) * 2 - 1;
+      const y = -(touch.clientY / window.innerHeight) * 2 + 1;
       
-      // 根据触摸位置计算光源位置
-      // 中心点光源在正上方，边缘点光源在斜上方
-      const distance = 15;
-      const height = 10;
+      // 计算新的光源位置
+      // 将屏幕坐标映射到3D空间
+      const distance = 10;
+      const lightX = x * distance;
+      const lightY = y * distance + 5;  // 偏移一些高度
+      const lightZ = 5;
       
-      window.mainLight.position.set(
-        x * distance,  // X方向：根据横向位置
-        height + y * 5,  // Y方向：保持在上方，但有变化
-        distance * 0.5  // Z方向：稍微向前
-      );
-      
-      // 更新阴影相机位置
-      window.mainLight.shadow.camera.updateProjectionMatrix();
+      // 更新光源位置
+      if (window.mainLight) {
+        window.mainLight.position.set(lightX, lightY, lightZ);
+        
+        // 可选：添加视觉反馈
+        const indicator = document.getElementById('light-indicator');
+        if (indicator) {
+          indicator.style.left = touch.clientX + 'px';
+          indicator.style.top = touch.clientY + 'px';
+          indicator.style.opacity = '1';
+          setTimeout(() => {
+            indicator.style.opacity = '0';
+          }, 500);
+        }
+      }
     }
     
-    // 监听鼠标移动和触摸移动
-    document.addEventListener('mousemove', handlePointerMove);
-    document.addEventListener('touchmove', (e) => {
-      if (e.touches.length > 0) {
-        handlePointerMove(e.touches[0]);
-      }
+    // 监听触摸和鼠标事件
+    document.addEventListener('touchstart', handleTouch);
+    document.addEventListener('touchmove', handleTouch);
+    document.addEventListener('mousedown', handleTouch);
+    document.addEventListener('mousemove', (e) => {
+      if (e.buttons === 1) handleTouch(e);  // 只在按下鼠标时更新
     });
-    
-    // 点击备用触发（同时更新光源）
+
+    // 点击备用触发
     document.addEventListener('click', (e) => {
-      // 更新光源位置
-      handlePointerMove(e);
-      
       // 避免点击按钮时触发
       if (e.target.id !== 'permission-btn' && balloons.length < MAX_BALLOONS) {
         createBalloon();
